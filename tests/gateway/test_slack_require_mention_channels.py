@@ -64,6 +64,7 @@ def _clean_env(monkeypatch, tmp_path):
         "SLACK_REQUIRE_MENTION_CHANNELS",
         "SLACK_FREE_RESPONSE_CHANNELS",
         "SLACK_STRICT_MENTION",
+        "SLACK_TURN_TAKING",
         "SLACK_THREAD_REQUIRE_MENTION",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -127,6 +128,16 @@ def test_require_mention_channels_csv_and_list():
         "C1",
         "C2",
     }
+
+
+def test_turn_taking_alias_defaults_to_strict_mention():
+    assert _make({"strict_mention": True})._slack_turn_taking() is True
+    assert _make({"strict_mention": False})._slack_turn_taking() is False
+
+
+def test_turn_taking_explicit_config_overrides_legacy_alias():
+    assert _make({"strict_mention": True, "turn_taking": False})._slack_turn_taking() is False
+    assert _make({"strict_mention": False, "turn_taking": True})._slack_turn_taking() is True
 
 
 def test_yaml_bridge_sets_env(monkeypatch):
