@@ -5739,7 +5739,7 @@ class SlackAdapter(BasePlatformAdapter):
                 )
                 if parent_text and f"<@{bot_uid}>" in parent_text:
                     # Remember the thread so later replies skip the fetch.
-                    if not self._slack_strict_mention():
+                    if not self._slack_turn_taking():
                         self._register_mentioned_thread(event_thread_ts)
                     return True
         return False
@@ -6212,8 +6212,8 @@ class SlackAdapter(BasePlatformAdapter):
                         event_thread_ts,
                     )
                     return
-            elif self._slack_strict_mention() and not is_mentioned:
-                return  # Strict mode: ignore until @-mentioned again
+            elif self._slack_turn_taking() and not is_mentioned:
+                return  # Explicit turn-taking: ignore until @-mentioned again
             elif (
                 self._slack_thread_require_mention()
                 and is_thread_reply
@@ -6270,7 +6270,7 @@ class SlackAdapter(BasePlatformAdapter):
             # it must auto-trigger the bot too (#24848).
             if (
                 thread_ts
-                and not self._slack_strict_mention()
+                and not self._slack_turn_taking()
                 and not self._slack_thread_require_mention()
             ):
                 self._register_mentioned_thread(thread_ts, team_id=team_id)
@@ -8773,6 +8773,10 @@ class SlackAdapter(BasePlatformAdapter):
         """When true, channel threads require an explicit @-mention on every
         message. Disables all auto-triggers (mentioned-thread memory,
         bot-message follow-up, session-presence). Defaults to False.
+
+        ``strict_mention`` is intentionally the opt-in switch for explicit
+        turn-taking: a shared channel should not be treated as a conversation
+        with the bot merely because it was mentioned earlier in the thread.
         """
         configured = self.config.extra.get("strict_mention")
         if configured is not None:
@@ -8785,6 +8789,25 @@ class SlackAdapter(BasePlatformAdapter):
             "yes",
             "on",
         }
+
+    def _slack_turn_taking(self) -> bool:
+        """Return whether this channel uses explicit mention turn-taking.
+
+        This alias makes the user-facing intent clearer than the historical
+        ``strict_mention`` name while preserving the existing configuration
+        and environment variable. When enabled, every channel message must
+        explicitly mention the bot; thread/session wake heuristics cannot
+        silently resume the conversation.
+        """
+        configured = self.config.extra.get("turn_taking")
+        if configured is not None:
+            if isinstance(configured, str):
+                return configured.lower() in {"true", "1", "yes", "on"}
+            return bool(configured)
+        configured = os.getenv("SLACK_TURN_TAKING")
+        if configured is not None:
+            return configured.lower() in {"true", "1", "yes", "on"}
+        return self._slack_strict_mention()
 
     def _slack_ignore_other_user_mentions(self) -> bool:
         """When true, ignore channel/thread messages addressed to another user.
